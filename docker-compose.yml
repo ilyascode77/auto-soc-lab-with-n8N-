@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - xpack.security.enabled=false # Désactive la sécurité pour simplifier le lab
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m" # Réduit la RAM pour les labs
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200" # Port pour Elasticsearch (pas directement utilisé par Winlogbeat)
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: logstash
+    environment:
+      - "LS_JAVA_OPTS=-Xms256m -Xmx256m" # Réduit la RAM pour les labs
+    ports:
+      - "5044:5044/tcp" # Port pour Winlogbeat (CLÉ !)
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    ports:
+      - "5601:5601" # Port pour l'interface web Kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - XPACK_ENCRYPTED_SAVED_OBJECTS_ENCRYPTIONKEY=MaCleSecretePourLesAlertesDuLabA1 # <--- C'EST ICI QU'IL FAUT L'AJOUTER
+    depends_on:
+      - elasticsearch
+
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n
+    ports:
+      - "5678:5678" # Port pour l'interface web n8n
+    environment:
+      - N8N_HOST=192.168.88.155 # Très important ! Indique à n8n sa propre IP
+      - N8N_PORT=5678
+      - WEBHOOK_URL=http://192.168.88.155:5678/
+      - VUE_APP_URL_BASE_API=http://192.168.88.155:5678/
+      - GENERIC_TIMEZONE=Europe/Paris # Ou votre fuseau horaire
+      - N8N_SECURE_COOKIE=false # <--- AJOUTEZ CETTE LIGNE
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  esdata:
+  n8n_data:
